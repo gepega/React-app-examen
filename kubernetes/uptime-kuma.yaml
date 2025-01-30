@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: uptime-kuma
-          image: louislam/uptime-kuma:1
+          image: louislam/uptime-kuma:1.19.0  # Usa una versión específica
           ports:
             - containerPort: 3001
           resources:
@@ -25,6 +25,12 @@ spec:
             limits:
               memory: "512Mi"
               cpu: "500m"
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           volumeMounts:
             - name: uptime-kuma-data
               mountPath: /app/data
@@ -50,13 +56,45 @@ kind: Service
 metadata:
   name: uptime-kuma
   namespace: uptime-kuma
-  annotations:
-    service.beta.kubernetes.io/azure-load-balancer-internal: "false"
 spec:
-  type: LoadBalancer
+  type: ClusterIP  # Cambiado a ClusterIP
   ports:
     - port: 3001
       targetPort: 3001
       protocol: TCP
   selector:
     app: uptime-kuma
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: uptime-kuma-network-policy
+  namespace: uptime-kuma
+spec:
+  podSelector:
+    matchLabels:
+      app: uptime-kuma
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: allowed-app
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: allowed-app
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: uptime-kuma-pdb
+  namespace: uptime-kuma
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: uptime-kuma
